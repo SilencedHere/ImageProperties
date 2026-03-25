@@ -11,7 +11,7 @@ def srgb_to_linear(img: Image.Image) -> np.ndarray:
     )
     return linear
 
-def load(img: Image) -> tuple[np.ndarray, np.ndarray]:
+def load(img: Image.Image) -> tuple[np.ndarray, np.ndarray]:
     srgb = np.array(img) / 255.0
     linear = srgb_to_linear(img)
     return linear, srgb
