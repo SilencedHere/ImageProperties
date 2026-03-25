@@ -1,0 +1,16 @@
+[project]
+name = "ImageProperties"
+version = "0.1.0"
+requires-python = ">=3.10"
+
+dependencies = [
+    "numpy",
+    "scipy",
+    "scikit-image",
+    "opencv-contrib-python",
+    "Pillow",
+    "pandas",        # for results/CSVs
+]
+
+[project.optional-dependencies]
+dev = ["jupyter", "matplotlib"]  # for exploration
