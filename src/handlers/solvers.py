@@ -2,7 +2,10 @@ import numpy as np
 from preprocessing import list_dir_files, load
 from PIL import Image
 from skimage.segmentation import flood
-
+from skimage.feature import canny
+from skimage.measure import shannon_entropy
+from skimage.transform import radon
+import cv2 as cv
 
 def calculate(dirpath: str):
     for filepath in list_dir_files(dirpath):
@@ -11,6 +14,7 @@ def calculate(dirpath: str):
 def calculate_single(filepath: str):
     img = Image.open(filepath).convert("RGB")
     img_linear, img_srgb = load(img)
+    gray = np.mean(img_linear, axis=2)
 
     jpeg_size = calculate_jpeg_size(img)
 
@@ -18,14 +22,18 @@ def calculate_single(filepath: str):
     if abs(object_size_masked - object_size_flooded) > 200:
         print(f"Significant difference in flood fill vs np masking technique for {filepath}")
 
-    gray = np.mean(img_linear, axis=2)
     contrast = np.std(gray)
     luminance = np.mean(gray)
 
     colorfulness = calculate_colorfulness(img_srgb)
 
+    hue, sat, val = calculate_hsv(img_srgb)
 
+    entropy = shannon_entropy(gray)
 
+    edges = calculate_edges(gray)
+
+    symmetry = calculate_symmetry(gray)
 
 def calculate_jpeg_size(img: Image.Image) -> int:
     width, height = img.size
@@ -86,7 +94,18 @@ def calculate_colorfulness(img: np.ndarray) -> float:
     sigma = np.sqrt(np.std(rg)**2+np.std(yb)**2)
     return sigma + 0.3 * mu
 
+def calculate_hsv(img: np.ndarray) -> tuple[int, int, int]:
+    hsv = cv.cvtColor((img * 255).astype(np.uint8), cv.COLOR_RGB2HSV)
+    return hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
 
+def calculate_edges(gray: np.ndarray) -> float:
+    edges = canny(gray)
+    return np.sum(edges) / edges.size
+
+def calculate_symmetry(gray: np.ndarray) -> float:
+    angles = np.linspace(0, 180, 180, endpoint=False)
+    sinogram = radon(gray, theta=angles)
+    return np.mean(sinogram)
 
 
 
