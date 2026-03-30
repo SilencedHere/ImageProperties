@@ -14,10 +14,16 @@ def calculate_single(filepath: str):
 
     jpeg_size = calculate_jpeg_size(img)
 
-
     object_size_masked, object_size_flooded = calculate_object_size(img_srgb)
     if abs(object_size_masked - object_size_flooded) > 200:
         print(f"Significant difference in flood fill vs np masking technique for {filepath}")
+
+    gray = np.mean(img_linear, axis=2)
+    contrast = np.std(gray)
+    luminance = np.mean(gray)
+
+    colorfulness = calculate_colorfulness(img_srgb)
+
 
 
 
@@ -72,8 +78,13 @@ def calculate_object_size(img: np.ndarray) -> tuple[int, int]:
 
     return mask_value, flood_value
 
-
-
+def calculate_colorfulness(img: np.ndarray) -> float:
+    R, G, B = img[:, :, 0], img[:, :, 1], img[:, :, 2]
+    rg = R - G
+    yb = 0.5*(R + G) - B
+    mu = np.sqrt(np.mean(rg)**2+np.mean(yb)**2)
+    sigma = np.sqrt(np.std(rg)**2+np.std(yb)**2)
+    return sigma + 0.3 * mu
 
 
 
