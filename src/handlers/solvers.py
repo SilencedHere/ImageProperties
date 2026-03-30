@@ -107,5 +107,16 @@ def calculate_symmetry(gray: np.ndarray) -> float:
     sinogram = radon(gray, theta=angles)
     return np.mean(sinogram)
 
+def calculate_MSER(gray: np.ndarray) -> float:
+    gray_uint8 = (gray * 255).astype(np.uint8)
+    mser = cv.MSER_create()
+    regions, _ = mser.detectRegions(gray_uint8)
+    return len(regions)
+
+def calculate_SIFT(gray: np.ndarray) -> float:
+    gray_uint8 = (gray * 255).astype(np.uint8)
+    sift = cv.SIFT_create()
+    keypoints, _ = sift.detectAndCompute(gray_uint8, None)
+    return len(keypoints)
 
 
