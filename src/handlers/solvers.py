@@ -7,9 +7,15 @@ from skimage.measure import shannon_entropy
 from skimage.transform import radon
 import cv2 as cv
 
+# Main published function. Iterates through all the images in a directory.
 def calculate(dirpath: str):
     for filepath in list_dir_files(dirpath):
-        calculate_single(filepath)
+        # Check filetype
+        if filepath.lower().endswith('.png'):
+            calculate_single(filepath)
+        # Print warnings for incorrect filetypes
+        else:
+            print("Incorrect file type: " + filepath)
 
 def calculate_single(filepath: str):
     img = Image.open(filepath).convert("RGB")
@@ -34,6 +40,15 @@ def calculate_single(filepath: str):
     edges = calculate_edges(gray)
 
     symmetry = calculate_symmetry(gray)
+
+    fft = np.fft.fft2(gray)
+    fft_shift = np.fft.fftshift(fft)
+    power = np.abs(fft_shift) ** 2
+    spectral_energy = calculate_spectral_energy(gray)
+    high_spatial_frequencies = calculate_high_spatial_frequencies(gray, power)
+
+    # Some logic for returning etc.
+
 
 def calculate_jpeg_size(img: Image.Image) -> int:
     width, height = img.size
@@ -119,4 +134,15 @@ def calculate_SIFT(gray: np.ndarray) -> float:
     keypoints, _ = sift.detectAndCompute(gray_uint8, None)
     return len(keypoints)
 
+def calculate_spectral_energy(power) -> np.ndarray:
+    power_flat = np.sort(power.ravel())[::-1]
+    cumulative = np.cumsum(power_flat)
+    return np.searchsorted(cumulative, 0.8*cumulative[-1])
 
+def calculate_high_spatial_frequencies(gray: np.ndarray, power) -> np.ndarray:
+    h, w = gray.shape
+    cy, cx = h//2, w//2
+    Y, X = np.ogrid[:h, :w]
+    dist = np.sqrt((X - cx)**2 + (Y - cy)**2)
+    high_freq_mask = dist > 10
+    return np.sum(power[high_freq_mask]) / np.sum(power)
