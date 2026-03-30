@@ -6,16 +6,19 @@ from skimage.feature import canny
 from skimage.measure import shannon_entropy
 from skimage.transform import radon
 import cv2 as cv
+from metrics import ImageMetrics
 
 # Main published function. Iterates through all the images in a directory.
-def calculate(dirpath: str):
+def calculate(dirpath: str) -> list[ImageMetrics]:
+    collector = []
     for filepath in list_dir_files(dirpath):
         # Check filetype
         if filepath.lower().endswith('.png'):
-            calculate_single(filepath)
+            collector.append(calculate_single(filepath))
         # Print warnings for incorrect filetypes
         else:
             print("Incorrect file type: " + filepath)
+    return collector
 
 def calculate_single(filepath: str):
     img = Image.open(filepath).convert("RGB")
@@ -28,10 +31,10 @@ def calculate_single(filepath: str):
     if abs(object_size_masked - object_size_flooded) > 200:
         print(f"Significant difference in flood fill vs np masking technique for {filepath}")
 
-    contrast = np.std(gray)
-    luminance = np.mean(gray)
+    contrast = float(np.std(gray))
+    luminance = float(np.mean(gray))
 
-    colorfulness = calculate_colorfulness(img_srgb)
+    colorfulness = float(calculate_colorfulness(img_srgb))
 
     hue, sat, val = calculate_hsv(img_srgb)
 
@@ -41,14 +44,34 @@ def calculate_single(filepath: str):
 
     symmetry = calculate_symmetry(gray)
 
+    MSER = calculate_MSER(gray)
+    SIFT = calculate_SIFT(gray)
+
     fft = np.fft.fft2(gray)
     fft_shift = np.fft.fftshift(fft)
     power = np.abs(fft_shift) ** 2
-    spectral_energy = calculate_spectral_energy(gray)
+    spectral_energy = calculate_spectral_energy(power)
     high_spatial_frequencies = calculate_high_spatial_frequencies(gray, power)
 
-    # Some logic for returning etc.
-
+    return ImageMetrics(
+        filepath,
+        jpeg_size,
+        object_size_masked,
+        object_size_flooded,
+        contrast,
+        luminance,
+        colorfulness,
+        hue,
+        sat,
+        val,
+        entropy,
+        edges,
+        symmetry,
+        MSER,
+        SIFT,
+        spectral_energy,
+        high_spatial_frequencies,
+    )
 
 def calculate_jpeg_size(img: Image.Image) -> int:
     width, height = img.size
@@ -77,12 +100,12 @@ def calculate_object_size(img: np.ndarray) -> tuple[int, int]:
 
         test_points = corners + (top_center, bottom_center, left_center, right_center)
         pairs = [(a,b) for a in test_points for b in test_points if a is not b]
-        similar = sum(np.sqrt(np.sum((a-b)**2)) < 5 for a, b in pairs)
+        similar = sum(np.sqrt(np.sum((a-b)**2)) < 2 for a, b in pairs)
         ratio = similar / len(pairs)
         if ratio > 0.7:
             background_color = next(
                 a for i, a in enumerate(test_points)
-                if sum(np.sqrt(np.sum((a-b)**2)) < 5
+                if sum(np.sqrt(np.sum((a-b)**2)) < 2
                     for j, b in enumerate(test_points) if i != j)
                 / (len(test_points) - 1) >= 0.7
             )
@@ -95,11 +118,12 @@ def calculate_object_size(img: np.ndarray) -> tuple[int, int]:
         mask_value = w*h - np.sum(numpy_mask)
 
         flood_mask = np.zeros((h, w), bool)
+        gray_srgb = np.mean(img, axis=2)
         for seed in [(0,0), (0,w-1), (h-1,0), (h-1,w-1)]:
-            flood_mask |= flood(img, seed, tolerance=5)
+            flood_mask |= flood(gray_srgb, seed, tolerance=2/255)
         flood_value = w*h - np.sum(flood_mask)
 
-    return mask_value, flood_value
+    return int(mask_value), int(flood_value)
 
 def calculate_colorfulness(img: np.ndarray) -> float:
     R, G, B = img[:, :, 0], img[:, :, 1], img[:, :, 2]
@@ -107,20 +131,28 @@ def calculate_colorfulness(img: np.ndarray) -> float:
     yb = 0.5*(R + G) - B
     mu = np.sqrt(np.mean(rg)**2+np.mean(yb)**2)
     sigma = np.sqrt(np.std(rg)**2+np.std(yb)**2)
-    return sigma + 0.3 * mu
+    return float(sigma + 0.3 * mu)
 
-def calculate_hsv(img: np.ndarray) -> tuple[int, int, int]:
+def calculate_hsv(img: np.ndarray) -> tuple[int, float, float]:
     hsv = cv.cvtColor((img * 255).astype(np.uint8), cv.COLOR_RGB2HSV)
-    return hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
+    hue = int(np.bincount(hsv[:, :, 0].ravel()).argmax())
+    sat = float(np.mean(hsv[:, :, 1]))
+    val = float(np.mean(hsv[:, :, 2]))
+    return hue, sat, val
 
 def calculate_edges(gray: np.ndarray) -> float:
     edges = canny(gray)
     return np.sum(edges) / edges.size
 
 def calculate_symmetry(gray: np.ndarray) -> float:
+    h, w = gray.shape
+    cy, cx = h // 2, w // 2
+    Y, X = np.ogrid[:h, :w]
+    circle_mask = (X - cx) ** 2 + (Y - cy) ** 2 <= min(cx, cy) ** 2
+    masked = gray * circle_mask
     angles = np.linspace(0, 180, 180, endpoint=False)
-    sinogram = radon(gray, theta=angles)
-    return np.mean(sinogram)
+    sinogram = radon(masked, theta=angles)
+    return float(np.mean(sinogram))
 
 def calculate_MSER(gray: np.ndarray) -> float:
     gray_uint8 = (gray * 255).astype(np.uint8)
@@ -134,15 +166,15 @@ def calculate_SIFT(gray: np.ndarray) -> float:
     keypoints, _ = sift.detectAndCompute(gray_uint8, None)
     return len(keypoints)
 
-def calculate_spectral_energy(power) -> np.ndarray:
+def calculate_spectral_energy(power: np.ndarray) -> int:
     power_flat = np.sort(power.ravel())[::-1]
     cumulative = np.cumsum(power_flat)
-    return np.searchsorted(cumulative, 0.8*cumulative[-1])
+    return int(np.searchsorted(cumulative, 0.8*cumulative[-1]))
 
-def calculate_high_spatial_frequencies(gray: np.ndarray, power) -> np.ndarray:
+def calculate_high_spatial_frequencies(gray: np.ndarray, power: np.ndarray) -> float:
     h, w = gray.shape
     cy, cx = h//2, w//2
     Y, X = np.ogrid[:h, :w]
     dist = np.sqrt((X - cx)**2 + (Y - cy)**2)
     high_freq_mask = dist > 10
-    return np.sum(power[high_freq_mask]) / np.sum(power)
+    return float(np.sum(power[high_freq_mask]) / np.sum(power))
