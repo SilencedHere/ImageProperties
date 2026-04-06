@@ -28,7 +28,7 @@ def calculate_single(filepath: str):
     jpeg_size = calculate_jpeg_size(img)
 
     object_size_masked, object_size_flooded = calculate_object_size(img_srgb)
-    if abs(object_size_masked - object_size_flooded) > 200:
+    if abs(object_size_masked - object_size_flooded) > 500:
         print(f"Significant difference in flood fill vs np masking technique for {filepath}")
 
     contrast = float(np.std(gray))
@@ -92,7 +92,7 @@ def calculate_object_size(img: np.ndarray) -> tuple[int, int]:
     bottom_right = img[h - 1, w - 1]
 
     corners = (top_left, top_right, bottom_left, bottom_right)
-    if not all(np.sqrt(np.sum((a-b)**2)) < 5 for a in corners for b in corners):
+    if not all(np.sqrt(np.sum((a-b)**2)) < 2 for a in corners for b in corners):
         top_center = img[0, w // 2]
         bottom_center = img[h - 1, w // 2]
         left_center = img[h // 2, 0]
@@ -114,14 +114,24 @@ def calculate_object_size(img: np.ndarray) -> tuple[int, int]:
 
     if background_color is not None:
 
-        numpy_mask = np.all(img == background_color, axis=2)
+        gray_srgb = np.mean(img, axis=2)
+        bg_gray = np.mean(background_color)
+
+        numpy_mask = np.abs(gray_srgb - bg_gray) < 2/255
         mask_value = w*h - np.sum(numpy_mask)
 
         flood_mask = np.zeros((h, w), bool)
-        gray_srgb = np.mean(img, axis=2)
+
         for seed in [(0,0), (0,w-1), (h-1,0), (h-1,w-1)]:
             flood_mask |= flood(gray_srgb, seed, tolerance=2/255)
         flood_value = w*h - np.sum(flood_mask)
+
+        # debug = np.zeros((h, w, 3), dtype=np.uint8)
+        # debug[flood_mask] = [0, 255, 0]  # green = flood mask
+        # debug[numpy_mask] = [255, 0, 0]  # red = numpy mask
+        # debug[numpy_mask & flood_mask] = [0, 255, 255]  # yellow = both
+
+        # cv.imwrite("debug_masks.png", debug)
 
     return int(mask_value), int(flood_value)
 
