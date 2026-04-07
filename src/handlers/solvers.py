@@ -27,9 +27,15 @@ def calculate_single(filepath: str):
 
     jpeg_size = calculate_jpeg_size(img)
 
-    object_size_masked, object_size_flooded = calculate_object_size(img_srgb)
-    if abs(object_size_masked - object_size_flooded) > 500:
-        print(f"Significant difference in flood fill vs np masking technique for {filepath}")
+    object_size_masked, object_size_flooded, object_np_mask, object_flood_mask = calculate_object_size(img_srgb)
+    pure_mask = object_flood_mask
+    if abs(object_size_masked - object_size_flooded) > 700:
+        print(f"Significant difference in flood fill vs np masking technique for {filepath}, defaulting to use np mask over flooding.")
+        print("Check manually.")
+        pure_mask = object_np_mask
+
+    gray_object = gray * ~pure_mask
+    img_object = img_srgb * (~pure_mask)[:, :, None]
 
     contrast = float(np.std(gray))
     luminance = float(np.mean(gray))
@@ -77,7 +83,7 @@ def calculate_jpeg_size(img: Image.Image) -> int:
     width, height = img.size
     return width*height
 
-def calculate_object_size(img: np.ndarray) -> tuple[int, int]:
+def calculate_object_size(img: np.ndarray) -> tuple[int, int, np.ndarray, np.ndarray]:
     # Get edge colours and choose if possible with high confidence
     h, w = img.shape[:2]
 
@@ -133,7 +139,10 @@ def calculate_object_size(img: np.ndarray) -> tuple[int, int]:
 
         # cv.imwrite("debug_masks.png", debug)
 
-    return int(mask_value), int(flood_value)
+        return int(mask_value), int(flood_value), numpy_mask, flood_mask
+
+    print("Failed to get background color")
+    return None, None, None, None
 
 def calculate_colorfulness(img: np.ndarray) -> float:
     R, G, B = img[:, :, 0], img[:, :, 1], img[:, :, 2]
