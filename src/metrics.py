@@ -7,7 +7,9 @@ class ImageMetrics:
     object_size_masked: int
     object_size_flooded: int
     contrast: float
+    bg_contrast: float
     luminance: float
+    luminance_linear: float
     colorfulness: float
     hue: int
     sat: float
@@ -18,4 +20,7 @@ class ImageMetrics:
     MSER: float
     SIFT: float
     spectral_energy: float
+    low_band: float
+    mid_band: float
+    high_band: float
     high_spatial_frequencies: float

@@ -70,7 +70,9 @@ def calculate_single(filepath: str):
         object_size_masked,
         object_size_flooded,
         contrast,
+        bg_contrast,
         luminance,
+        luminance_linear,
         colorfulness,
         hue,
         sat,
@@ -81,6 +83,9 @@ def calculate_single(filepath: str):
         MSER,
         SIFT,
         spectral_energy,
+        low_band,
+        mid_band,
+        high_band,
         high_spatial_frequencies,
     )
 
