@@ -24,7 +24,6 @@ def calculate_single(filepath: str):
     img = Image.open(filepath).convert("RGB")
     img_linear, img_srgb = load(img)
     gray = np.mean(img_linear, axis=2)
-    h, w = gray.shape
 
     jpeg_size = calculate_jpeg_size(img)
 
@@ -36,12 +35,45 @@ def calculate_single(filepath: str):
         pure_mask = object_np_mask
 
     gray_object = gray * ~pure_mask
-    img_object = img_srgb * (~pure_mask)[:, :, None]
+    img_srgb_object = img_srgb * (~pure_mask)[:, :, None]
+
+    #contrast = float(np.std(gray))
+    #bg_contrast = float(np.mean(np.abs(gray[~pure_mask] - bg_gray)))
+    #luminance = float(np.mean(gray))
+    #luminance_linear = float(np.mean(0.2126*img_linear[:,:,0] + 0.7152*img_linear[:,:,1] + 0.0722*img_linear[:,:,2]))
+    #
+    #colorfulness = float(calculate_colorfulness(img_srgb))
+    #
+    #hue, sat, val = calculate_hsv(img_srgb)
+    #
+    #entropy = shannon_entropy(gray)
+    #
+    #edges = calculate_edges(gray)
+    #
+    #symmetry = calculate_symmetry(gray)
+    #
+    #MSER = calculate_MSER(gray)
+    #SIFT = calculate_SIFT(gray)
+    #
+    #fft = np.fft.fft2(gray)
+    #fft_shift = np.fft.fftshift(fft)
+    #power = np.abs(fft_shift) ** 2
+    #spectral_energy = calculate_spectral_energy(power, h, w)
+    #low_band, mid_band, high_band = calculate_spectral_bands(power, h, w)
+    #high_spatial_frequencies = calculate_high_spatial_frequencies(gray, power)
+
+
+    return calculate_part(filepath, jpeg_size, object_size_masked, object_size_flooded, gray, img_linear, img_srgb, pure_mask, bg_gray), calculate_part(filepath, jpeg_size, object_size_masked, object_size_flooded, gray_object, img_linear, img_srgb_object, pure_mask, bg_gray)
+
+
+def calculate_part(filepath, jpeg_size, object_size_masked, object_size_flooded, gray, img_linear, img_srgb, pure_mask, bg_gray) -> ImageMetrics:
+    h, w = gray.shape
 
     contrast = float(np.std(gray))
     bg_contrast = float(np.mean(np.abs(gray[~pure_mask] - bg_gray)))
     luminance = float(np.mean(gray))
-    luminance_linear = float(np.mean(0.2126*img_linear[:,:,0] + 0.7152*img_linear[:,:,1] + 0.0722*img_linear[:,:,2]))
+    luminance_linear = float(
+        np.mean(0.2126 * img_linear[:, :, 0] + 0.7152 * img_linear[:, :, 1] + 0.0722 * img_linear[:, :, 2]))
 
     colorfulness = float(calculate_colorfulness(img_srgb))
 
@@ -62,7 +94,6 @@ def calculate_single(filepath: str):
     spectral_energy = calculate_spectral_energy(power, h, w)
     low_band, mid_band, high_band = calculate_spectral_bands(power, h, w)
     high_spatial_frequencies = calculate_high_spatial_frequencies(gray, power)
-
 
     return ImageMetrics(
         filepath,
