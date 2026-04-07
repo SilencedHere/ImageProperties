@@ -24,10 +24,11 @@ def calculate_single(filepath: str):
     img = Image.open(filepath).convert("RGB")
     img_linear, img_srgb = load(img)
     gray = np.mean(img_linear, axis=2)
+    h, w = gray.shape
 
     jpeg_size = calculate_jpeg_size(img)
 
-    object_size_masked, object_size_flooded, object_np_mask, object_flood_mask = calculate_object_size(img_srgb)
+    object_size_masked, object_size_flooded, object_np_mask, object_flood_mask, bg_gray = calculate_object_size(img_srgb)
     pure_mask = object_flood_mask
     if abs(object_size_masked - object_size_flooded) > 700:
         print(f"Significant difference in flood fill vs np masking technique for {filepath}, defaulting to use np mask over flooding.")
@@ -38,7 +39,9 @@ def calculate_single(filepath: str):
     img_object = img_srgb * (~pure_mask)[:, :, None]
 
     contrast = float(np.std(gray))
+    bg_contrast = float(np.mean(np.abs(gray[~pure_mask] - bg_gray)))
     luminance = float(np.mean(gray))
+    luminance_linear = float(np.mean(0.2126*img_linear[:,:,0] + 0.7152*img_linear[:,:,1] + 0.0722*img_linear[:,:,2]))
 
     colorfulness = float(calculate_colorfulness(img_srgb))
 
@@ -56,8 +59,10 @@ def calculate_single(filepath: str):
     fft = np.fft.fft2(gray)
     fft_shift = np.fft.fftshift(fft)
     power = np.abs(fft_shift) ** 2
-    spectral_energy = calculate_spectral_energy(power)
+    spectral_energy = calculate_spectral_energy(power, h, w)
+    low_band, mid_band, high_band = calculate_spectral_bands(power, h, w)
     high_spatial_frequencies = calculate_high_spatial_frequencies(gray, power)
+
 
     return ImageMetrics(
         filepath,
@@ -83,7 +88,7 @@ def calculate_jpeg_size(img: Image.Image) -> int:
     width, height = img.size
     return width*height
 
-def calculate_object_size(img: np.ndarray) -> tuple[int, int, np.ndarray, np.ndarray]:
+def calculate_object_size(img: np.ndarray) -> tuple[int, int, np.ndarray, np.ndarray, np.floating]:
     # Get edge colours and choose if possible with high confidence
     h, w = img.shape[:2]
 
@@ -139,10 +144,10 @@ def calculate_object_size(img: np.ndarray) -> tuple[int, int, np.ndarray, np.nda
 
         # cv.imwrite("debug_masks.png", debug)
 
-        return int(mask_value), int(flood_value), numpy_mask, flood_mask
+        return int(mask_value), int(flood_value), numpy_mask, flood_mask, bg_gray
 
     print("Failed to get background color")
-    return None, None, None, None
+    return None, None, None, None, None
 
 def calculate_colorfulness(img: np.ndarray) -> float:
     R, G, B = img[:, :, 0], img[:, :, 1], img[:, :, 2]
@@ -185,10 +190,15 @@ def calculate_SIFT(gray: np.ndarray) -> float:
     keypoints, _ = sift.detectAndCompute(gray_uint8, None)
     return len(keypoints)
 
-def calculate_spectral_energy(power: np.ndarray) -> int:
-    power_flat = np.sort(power.ravel())[::-1]
-    cumulative = np.cumsum(power_flat)
-    return int(np.searchsorted(cumulative, 0.8*cumulative[-1]))
+def calculate_spectral_energy(power: np.ndarray, h, w) -> float:
+    cy, cx = h // 2, w // 2
+    Y, X = np.ogrid[:h, :w]
+    dist = np.sqrt((X - cx) ** 2 + (Y - cy) ** 2).ravel()
+    order = np.argsort(dist)
+    order = order[dist[order] > 0]
+    cumulative = np.cumsum(power.ravel()[order])
+    idx = np.searchsorted(cumulative, 0.8 * cumulative[-1])
+    return float(dist[order[idx]])
 
 def calculate_high_spatial_frequencies(gray: np.ndarray, power: np.ndarray) -> float:
     h, w = gray.shape
@@ -197,3 +207,14 @@ def calculate_high_spatial_frequencies(gray: np.ndarray, power: np.ndarray) -> f
     dist = np.sqrt((X - cx)**2 + (Y - cy)**2)
     high_freq_mask = dist > 10
     return float(np.sum(power[high_freq_mask]) / np.sum(power))
+
+def calculate_spectral_bands(power: np.ndarray, h: int, w: int) -> tuple[float, float, float]:
+    cy, cx = h//2, w//2
+    Y, X = np.ogrid[:h, :w]
+    max_freq = min(cy, cx)
+    dist = np.sqrt((X - cx)**2 + (Y - cy)**2) / max_freq
+    total = np.sum(power)
+    low = float(np.sum(power[dist <= 0.33]) / total)
+    mid = float(np.sum(power[(dist > 0.33) & (dist <= 0.66)]) / total)
+    high = float(np.sum(power[dist > 0.66]) / total)
+    return low, mid, high
